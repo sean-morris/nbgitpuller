@@ -59,9 +59,20 @@ class SyncHandler(IPythonHandler):
         :return: returns the PluginManager object used to call the implemented hooks of the plugin
         :raises: ContentProviderException -- this occurs when the content_provider parameter is not found
         """
+        import importlib_metadata
+
         plugin_manager = pluggy.PluginManager("nbgitpuller")
         plugin_manager.add_hookspecs(plugin_hook_specs)
-        num_loaded = plugin_manager.load_setuptools_entrypoints("nbgitpuller", name=content_provider)
+        # num_loaded = plugin_manager.load_setuptools_entrypoints("nbgitpuller", name=content_provider)
+        # if num_loaded == 0:
+        #     raise ContentProviderException(f"The content_provider key you supplied in the URL could not be found: {content_provider}")
+        num_loaded = 0
+        for dist in list(importlib_metadata.distributions()):
+            for ep in dist.entry_points:
+                if ep.group == "nbgitpuller" and ep.name == content_provider:
+                    plugin = ep.load()
+                    plugin_manager.register(plugin, name=content_provider)
+                    num_loaded += 1
         if num_loaded == 0:
             raise ContentProviderException(f"The content_provider key you supplied in the URL could not be found: {content_provider}")
         return plugin_manager
