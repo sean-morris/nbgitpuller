@@ -1,19 +1,19 @@
-import pluggy
+import aiopluggy
 
 # this hookspec is decorating the handle_files function below. The decorator defines
 # the interface(hook specifications) for any implementing content-provider plugins. The project name, nbgitpuller,
 # is passed to the constructor for HookspecMarker and HookimplMarker as well as to the constructor for the
 # PluginManager in handlers.py in order to allow the PluginManager.add_hookspecs method to automatically discover
 # all marked functions.
-hookspec = pluggy.HookspecMarker("nbgitpuller")
+hookspec = aiopluggy.HookspecMarker("nbgitpuller")
 
 # As a convenience the hookimpl field can be used by content-provider plugins to decorate the implementations of the
 # handle_files function. A content-provider plugin could create the HookImplMarker itself but in order to register
 # with the PluginManager the name('nbgitpuller') must be used as we do here.
-hookimpl = pluggy.HookimplMarker("nbgitpuller")
+hookimpl = aiopluggy.HookimplMarker("nbgitpuller")
 
 
-@hookspec(firstresult=True)
+@hookspec.first_only
 def handle_files(helper_args, query_line_args):
     """
     This function must be implemented by content-provider plugins in order to handle the downloading and decompression

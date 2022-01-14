@@ -12,8 +12,8 @@ import jinja2
 from .pull import GitPuller
 from .version import __version__
 from . import plugin_hook_specs
-import pluggy
-
+import aiopluggy
+import importlib_metadata
 
 class ContentProviderException(Exception):
     """
@@ -49,6 +49,14 @@ class SyncHandler(IPythonHandler):
         self.write('data: {}\n\n'.format(serialized_data))
         yield self.flush()
 
+    def find_plugin_from_entrypoints(self, group_name, content_provider):
+        for dist in list(importlib_metadata.distributions()):
+            for ep in dist.entry_points:
+                if ep.group == group_name and ep.name == content_provider:
+                    plugin = ep.load()
+                    return plugin
+        return None
+
     def setup_plugins(self, content_provider):
         """
         This automatically searches for and loads packages whose entrypoint is nbgitpuller. If found,
@@ -59,22 +67,12 @@ class SyncHandler(IPythonHandler):
         :return: returns the PluginManager object used to call the implemented hooks of the plugin
         :raises: ContentProviderException -- this occurs when the content_provider parameter is not found
         """
-        import importlib_metadata
-
-        plugin_manager = pluggy.PluginManager("nbgitpuller")
-        plugin_manager.add_hookspecs(plugin_hook_specs)
-        # num_loaded = plugin_manager.load_setuptools_entrypoints("nbgitpuller", name=content_provider)
-        # if num_loaded == 0:
-        #     raise ContentProviderException(f"The content_provider key you supplied in the URL could not be found: {content_provider}")
-        num_loaded = 0
-        for dist in list(importlib_metadata.distributions()):
-            for ep in dist.entry_points:
-                if ep.group == "nbgitpuller" and ep.name == content_provider:
-                    plugin = ep.load()
-                    plugin_manager.register(plugin, name=content_provider)
-                    num_loaded += 1
-        if num_loaded == 0:
+        plugin_manager = aiopluggy.PluginManager("nbgitpuller")
+        plugin_manager.register_specs(plugin_hook_specs)
+        plugin = self.find_plugin_from_entrypoints("nbgitpuller", content_provider)
+        if plugin is None:
             raise ContentProviderException(f"The content_provider key you supplied in the URL could not be found: {content_provider}")
+        plugin_manager.register(plugin)
         return plugin_manager
 
     @gen.coroutine
@@ -154,9 +152,9 @@ class SyncHandler(IPythonHandler):
                 helper_args["wait_for_sync_progress_queue"] = lambda: self._wait_for_sync_progress_queue(download_q)
                 helper_args["download_q"] = download_q
                 helper_args["repo_parent_dir"] = repo_parent_dir
-                results = plugin_manager.hook.handle_files(helper_args=helper_args,query_line_args=query_line_args)
-                repo_dir = repo_parent_dir + results["output_dir"]
-                repo = "file://" + results["origin_repo_path"]
+                results = yield plugin_manager.hooks.handle_files(helper_args=helper_args,query_line_args=query_line_args)
+                repo_dir = repo_parent_dir + results.value["output_dir"]
+                repo = "file://" + results.value["origin_repo_path"]
 
             gp = GitPuller(repo, repo_dir, branch=branch, depth=depth, parent=self.settings['nbapp'])
             q = Queue()
